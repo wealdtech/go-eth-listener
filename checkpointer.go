@@ -30,7 +30,7 @@ func initCheckpoint(actx *shared.AppContext) bool {
 	checkpointBlock, err = readCheckpoint(actx.ChainID)
 	if err != nil {
 		if err.Error() == "no checkpoint" {
-			checkpointBlock = big.NewInt(0)
+			checkpointBlock = zero
 			return true
 		}
 		log.WithFields(log.Fields{"error": err}).Fatal("Failed to obtain checkpoint")

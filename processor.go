@@ -54,7 +54,7 @@ func processBlock(actx *shared.AppContext, config *Config, blk *types.Block) {
 		var err error
 		block, err = config.Connection.BlockByNumber(ctx, block.Number())
 		if err != nil {
-			log.WithFields(log.Fields{"error": err}).Error("Failed to obtain block")
+			log.WithError(err).Error("Failed to obtain block")
 			return
 		}
 	}
@@ -68,7 +68,7 @@ func processBlock(actx *shared.AppContext, config *Config, blk *types.Block) {
 				defer cancel()
 				receipt, err := config.Connection.TransactionReceipt(ctx, tx.Hash())
 				if err != nil {
-					log.WithFields(log.Fields{"error": err}).Error("Failed to obtain block")
+					log.WithError(err).Error("Failed to obtain block")
 					continue
 				} else {
 					for _, log := range receipt.Logs {
@@ -79,5 +79,8 @@ func processBlock(actx *shared.AppContext, config *Config, blk *types.Block) {
 		}
 	}
 	config.BlkHandlers.Handle(actx, block)
-	writeCheckpoint(actx.ChainID, block.Number())
+	err := writeCheckpoint(actx.ChainID, block.Number())
+	if err != nil {
+		log.WithError(err).Error("Failed to write checkpoint")
+	}
 }

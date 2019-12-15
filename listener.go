@@ -25,6 +25,7 @@ func Listen(config *Config) error {
 	}
 
 	actx := &shared.AppContext{
+		Ctx:        ctx,
 		Connection: config.Connection,
 		Timeout:    config.Timeout,
 		ChainID:    chainID,
@@ -54,8 +55,6 @@ func Listen(config *Config) error {
 		log.WithFields(log.Fields{"from": curBlock}).Info("Catching up on old blocks")
 
 		for ; ; curBlock.Add(curBlock, big.NewInt(1)) {
-			ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
-			defer cancel()
 			blk, err := config.Connection.BlockByNumber(ctx, curBlock)
 			if err != nil {
 				// TODO Assuming we have hit the current block; should confirm this is the case
@@ -69,9 +68,7 @@ func Listen(config *Config) error {
 	blkHdrCh := make(chan *types.Header)
 	if config.BlkHandlers != nil || config.TxHandlers != nil || config.EventHandlers != nil {
 		if config.BlkHandlers != nil {
-			blkHdrCtx, blkHdrCancel := context.WithTimeout(context.Background(), config.Timeout)
-			defer blkHdrCancel()
-			_, err := config.Connection.SubscribeNewHead(blkHdrCtx, blkHdrCh)
+			_, err := config.Connection.SubscribeNewHead(ctx, blkHdrCh)
 			if err != nil {
 				log.WithFields(log.Fields{"error": err}).Fatal("failed to subscribe to block updates")
 			}
@@ -96,17 +93,15 @@ func Listen(config *Config) error {
 	}
 
 	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, os.Kill, syscall.SIGTERM)
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
 	// Loop
-	for true {
+	for {
 		select {
 		case pendingTx := <-pendingTxCh:
 			config.PendingTxHandlers.Handle(actx, pendingTx)
 		case blkHdr := <-blkHdrCh:
 			// Obtain block from the block header
-			ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
-			defer cancel()
 			blk, err := config.Connection.BlockByNumber(ctx, blkHdr.Number)
 			if err != nil {
 				log.WithFields(log.Fields{"error": err}).Error("Failed to obtain block")
@@ -121,15 +116,19 @@ func Listen(config *Config) error {
 			os.Exit(0)
 		}
 	}
-
-	return nil
 }
 
 func poll(actx *shared.AppContext, config *Config) {
 	tick := uint64(0)
+	ticker := time.NewTicker(config.PollInterval)
 	for {
-		config.PollHandlers.Handle(actx, tick)
-		time.Sleep(config.PollInterval)
-		tick++
+		select {
+		case <-ticker.C:
+			config.PollHandlers.Handle(actx, tick)
+			tick++
+		case <-actx.Ctx.Done():
+			ticker.Stop()
+			return
+		}
 	}
 }
