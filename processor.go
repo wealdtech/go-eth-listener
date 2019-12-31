@@ -78,7 +78,9 @@ func processBlock(actx *shared.AppContext, config *Config, blk *types.Block) {
 			}
 		}
 	}
-	config.BlkHandlers.Handle(actx, block)
+	if config.BlkHandlers != nil {
+		config.BlkHandlers.Handle(actx, block)
+	}
 	err := writeCheckpoint(actx.ChainID, block.Number())
 	if err != nil {
 		log.WithError(err).Error("Failed to write checkpoint")
