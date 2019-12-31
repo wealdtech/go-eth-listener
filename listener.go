@@ -52,26 +52,36 @@ func Listen(config *Config) error {
 				curBlock.Add(curBlock, big.NewInt(1))
 			}
 		}
-		log.WithFields(log.Fields{"from": curBlock}).Info("Catching up on old blocks")
 
+		log.WithField("from", curBlock).Info("Catching up on old blocks")
 		for ; ; curBlock.Add(curBlock, big.NewInt(1)) {
+			ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
+			defer cancel()
 			blk, err := config.Connection.BlockByNumber(ctx, curBlock)
 			if err != nil {
-				// TODO Assuming we have hit the current block; should confirm this is the case
-				break
+				ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
+				defer cancel()
+				header, err := config.Connection.HeaderByNumber(ctx, nil)
+				if err != nil {
+					log.WithError(err).Fatal("Failed to fetch head block")
+				}
+				if header.Number.Cmp(curBlock.Sub(curBlock, big.NewInt(1))) == 0 {
+					// Caught up
+					break
+				}
+				log.WithError(err).Fatal("Failed to catch up")
 			}
 			processBlock(actx, config, blk)
 		}
+		log.Info("Caught up")
 	}
 
 	// Catch new blocks
 	blkHdrCh := make(chan *types.Header)
 	if config.BlkHandlers != nil || config.TxHandlers != nil || config.EventHandlers != nil {
-		if config.BlkHandlers != nil {
-			_, err := config.Connection.SubscribeNewHead(ctx, blkHdrCh)
-			if err != nil {
-				log.WithFields(log.Fields{"error": err}).Fatal("failed to subscribe to block updates")
-			}
+		_, err := config.Connection.SubscribeNewHead(context.Background(), blkHdrCh)
+		if err != nil {
+			log.WithFields(log.Fields{"error": err}).Fatal("failed to subscribe to block updates")
 		}
 	}
 
@@ -102,12 +112,21 @@ func Listen(config *Config) error {
 			config.PendingTxHandlers.Handle(actx, pendingTx)
 		case blkHdr := <-blkHdrCh:
 			// Obtain block from the block header
+			ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
 			blk, err := config.Connection.BlockByNumber(ctx, blkHdr.Number)
 			if err != nil {
 				log.WithFields(log.Fields{"error": err}).Error("Failed to obtain block")
+				cancel()
 				continue
 			}
 			processBlock(actx, config, blk)
+			cancel()
+			//		case <-ctx.Done():
+			//			log.Info("Timeout")
+			//			if config.ShutdownHandlers != nil {
+			//				config.ShutdownHandlers.Handle(actx)
+			//			}
+			//			os.Exit(0)
 		case <-interrupt:
 			log.Info("Shutdown")
 			if config.ShutdownHandlers != nil {
