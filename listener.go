@@ -109,7 +109,7 @@ func Listen(config *Config) error {
 	for {
 		select {
 		case pendingTx := <-pendingTxCh:
-			config.PendingTxHandlers.Handle(actx, pendingTx)
+			config.PendingTxHandlers.Handle(actx, nil, pendingTx)
 		case blkHdr := <-blkHdrCh:
 			// Obtain block from the block header
 			ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)

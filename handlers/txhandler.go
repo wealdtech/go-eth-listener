@@ -6,14 +6,14 @@ import (
 )
 
 // TxHandlerFunc defines the handler function
-type TxHandlerFunc func(*shared.AppContext, *types.Transaction)
+type TxHandlerFunc func(*shared.AppContext, *types.Block, *types.Transaction)
 
 // Handle handles a transaction
-func (f TxHandlerFunc) Handle(actx *shared.AppContext, tx *types.Transaction) {
-	f(actx, tx)
+func (f TxHandlerFunc) Handle(actx *shared.AppContext, blk *types.Block, tx *types.Transaction) {
+	f(actx, blk, tx)
 }
 
 // TxHandler defines the methods that need to be implemented to handle transactions
 type TxHandler interface {
-	Handle(*shared.AppContext, *types.Transaction)
+	Handle(*shared.AppContext, *types.Block, *types.Transaction)
 }

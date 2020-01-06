@@ -28,20 +28,20 @@ func LogShutdown(h ShutdownHandler) ShutdownHandler {
 
 // LogPendingTx is called when the log module receives a pending transaction.
 func LogPendingTx(h TxHandler) TxHandler {
-	return TxHandlerFunc(func(actx *shared.AppContext, tx *types.Transaction) {
+	return TxHandlerFunc(func(actx *shared.AppContext, _ *types.Block, tx *types.Transaction) {
 		log.WithFields(log.Fields{"transaction": tx.Hash()}).Info("Pending transaction received")
 		if h != nil {
-			h.Handle(actx, tx)
+			h.Handle(actx, nil, tx)
 		}
 	})
 }
 
 // LogTx is called when the log module receives a transaction.
 func LogTx(h TxHandler) TxHandler {
-	return TxHandlerFunc(func(actx *shared.AppContext, tx *types.Transaction) {
+	return TxHandlerFunc(func(actx *shared.AppContext, blk *types.Block, tx *types.Transaction) {
 		log.WithFields(log.Fields{"hash": tx.Hash()}).Info("Transaction received")
 		if h != nil {
-			h.Handle(actx, tx)
+			h.Handle(actx, blk, tx)
 		}
 	})
 }
@@ -68,10 +68,10 @@ func LogPoll(h PollHandler) PollHandler {
 
 // LogEvent is called when the log module receives an event.
 func LogEvent(h EventHandler) EventHandler {
-	return EventHandlerFunc(func(actx *shared.AppContext, event *types.Log) {
+	return EventHandlerFunc(func(actx *shared.AppContext, blk *types.Block, tx *types.Transaction, event *types.Log) {
 		log.WithFields(log.Fields{"event": event}).Info("Event received")
 		if h != nil {
-			h.Handle(actx, event)
+			h.Handle(actx, blk, tx, event)
 		}
 	})
 }

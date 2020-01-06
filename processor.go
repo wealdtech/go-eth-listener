@@ -61,7 +61,7 @@ func processBlock(actx *shared.AppContext, config *Config, blk *types.Block) {
 		(config.TxHandlers != nil || config.EventHandlers != nil) {
 		for _, tx := range block.Transactions() {
 			if config.TxHandlers != nil {
-				config.TxHandlers.Handle(actx, tx)
+				config.TxHandlers.Handle(actx, block, tx)
 			}
 			if config.EventHandlers != nil {
 				ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
@@ -72,7 +72,7 @@ func processBlock(actx *shared.AppContext, config *Config, blk *types.Block) {
 					continue
 				} else {
 					for _, log := range receipt.Logs {
-						config.EventHandlers.Handle(actx, log)
+						config.EventHandlers.Handle(actx, block, tx, log)
 					}
 				}
 			}

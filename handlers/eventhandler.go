@@ -6,14 +6,14 @@ import (
 )
 
 // EventHandlerFunc defines the handler function
-type EventHandlerFunc func(*shared.AppContext, *types.Log)
+type EventHandlerFunc func(*shared.AppContext, *types.Block, *types.Transaction, *types.Log)
 
 // Handle handles a Block
-func (f EventHandlerFunc) Handle(actx *shared.AppContext, event *types.Log) {
-	f(actx, event)
+func (f EventHandlerFunc) Handle(actx *shared.AppContext, blk *types.Block, tx *types.Transaction, event *types.Log) {
+	f(actx, blk, tx, event)
 }
 
 // EventHandler defines the methods that need to be implemented to handle events
 type EventHandler interface {
-	Handle(*shared.AppContext, *types.Log)
+	Handle(*shared.AppContext, *types.Block, *types.Transaction, *types.Log)
 }
