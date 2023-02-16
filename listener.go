@@ -16,11 +16,11 @@ import (
 // Listen listens to a blockchain and triggers functions as new blocks, transactions etc. arrive
 func Listen(config *Config) error {
 	ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
-	defer cancel()
 	var err error
 	chainID, err = config.Connection.NetworkID(ctx)
 	if err != nil {
 		log.WithFields(log.Fields{"error": err}).Fatal("Failed to obtain chain ID")
+		cancel()
 		return err
 	}
 
@@ -56,22 +56,23 @@ func Listen(config *Config) error {
 		log.WithField("from", curBlock).Info("Catching up on old blocks")
 		for ; ; curBlock.Add(curBlock, big.NewInt(1)) {
 			ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
-			defer cancel()
 			blk, err := config.Connection.BlockByNumber(ctx, curBlock)
 			if err != nil {
-				ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
-				defer cancel()
+				ctx, cancel2 := context.WithTimeout(context.Background(), config.Timeout)
 				header, err := config.Connection.HeaderByNumber(ctx, nil)
 				if err != nil {
 					log.WithError(err).Fatal("Failed to fetch head block")
 				}
 				if header.Number.Cmp(curBlock.Sub(curBlock, big.NewInt(1))) == 0 {
 					// Caught up
+					cancel()
+					cancel2()
 					break
 				}
 				log.WithError(err).Fatal("Failed to catch up")
 			}
 			processBlock(actx, config, blk)
+			cancel()
 		}
 		log.Info("Caught up")
 	}
@@ -132,6 +133,7 @@ func Listen(config *Config) error {
 			if config.ShutdownHandlers != nil {
 				config.ShutdownHandlers.Handle(actx)
 			}
+			cancel()
 			os.Exit(0)
 		}
 	}
