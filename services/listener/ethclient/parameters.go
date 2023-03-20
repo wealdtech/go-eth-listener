@@ -1,0 +1,176 @@
+// Copyright © 2023 Weald Technology Limited.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Package ethclient is a listener that listens to an Ethereum client.
+package ethclient
+
+import (
+	"errors"
+	"time"
+
+	"github.com/cockroachdb/pebble"
+	"github.com/rs/zerolog"
+	"github.com/wealdtech/go-eth-listener/handlers"
+	"github.com/wealdtech/go-eth-listener/services/metrics"
+	nullmetrics "github.com/wealdtech/go-eth-listener/services/metrics/null"
+)
+
+type parameters struct {
+	logLevel      zerolog.Level
+	monitor       metrics.Service
+	metadataDB    *pebble.DB
+	address       string
+	timeout       time.Duration
+	blockDelay    uint32
+	blockTriggers []*handlers.BlockTrigger
+	txTriggers    []*handlers.TxTrigger
+	eventTriggers []*handlers.EventTrigger
+	interval      time.Duration
+}
+
+// Parameter is the interface for service parameters.
+type Parameter interface {
+	apply(*parameters)
+}
+
+type parameterFunc func(*parameters)
+
+func (f parameterFunc) apply(p *parameters) {
+	f(p)
+}
+
+// WithLogLevel sets the log level.
+func WithLogLevel(logLevel zerolog.Level) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.logLevel = logLevel
+	})
+}
+
+// WithMonitor sets the metrics monitor.
+func WithMonitor(monitor metrics.Service) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.monitor = monitor
+	})
+}
+
+// WithMetadataDB sets the metadata database.
+func WithMetadataDB(db *pebble.DB) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.metadataDB = db
+	})
+}
+
+// WithAddress sets the address of the Ethereum client.
+func WithAddress(address string) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.address = address
+	})
+}
+
+// WithTimeout sets the timeout for requests made to the Ethereum client.
+func WithTimeout(timeout time.Duration) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.timeout = timeout
+	})
+}
+
+// WithBlockDelay sets the number of blocks to delay before
+// passing on to the handlers, allowing avoidance of reorgs.
+func WithBlockDelay(delay uint32) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.blockDelay = delay
+	})
+}
+
+// WithBlockTriggers sets the block triggers for the listener.
+func WithBlockTriggers(triggers []*handlers.BlockTrigger) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.blockTriggers = triggers
+	})
+}
+
+// WithTxTriggers sets the transaction triggers for the listener.
+func WithTxTriggers(triggers []*handlers.TxTrigger) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.txTriggers = triggers
+	})
+}
+
+// WithEventTriggers sets the event triggers for the listener.
+func WithEventTriggers(triggers []*handlers.EventTrigger) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.eventTriggers = triggers
+	})
+}
+
+// WithInterval sets the interval between polls.
+func WithInterval(interval time.Duration) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.interval = interval
+	})
+}
+
+// parseAndCheckParameters parses and checks parameters to ensure that mandatory parameters are present and correct.
+func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
+	parameters := parameters{
+		logLevel: zerolog.GlobalLevel(),
+		monitor:  nullmetrics.New(),
+	}
+	for _, p := range params {
+		if params != nil {
+			p.apply(&parameters)
+		}
+	}
+
+	if parameters.monitor == nil {
+		return nil, errors.New("no monitor specified")
+	}
+	if parameters.metadataDB == nil {
+		return nil, errors.New("no metadata database specified")
+	}
+	if parameters.timeout == 0 {
+		return nil, errors.New("no timeout specified")
+	}
+	if parameters.address == "" {
+		return nil, errors.New("no address specified")
+	}
+	for _, blockTrigger := range parameters.blockTriggers {
+		if blockTrigger.Name == "" {
+			return nil, errors.New("no block trigger name specified")
+		}
+		if blockTrigger.Handler == nil {
+			return nil, errors.New("no block trigger handler specified")
+		}
+	}
+	for _, txTrigger := range parameters.txTriggers {
+		if txTrigger.Name == "" {
+			return nil, errors.New("no transaction trigger name specified")
+		}
+		if txTrigger.Handler == nil {
+			return nil, errors.New("no transaction trigger handler specified")
+		}
+	}
+	for _, eventTrigger := range parameters.eventTriggers {
+		if eventTrigger.Name == "" {
+			return nil, errors.New("no event trigger name specified")
+		}
+		if eventTrigger.Handler == nil {
+			return nil, errors.New("no event trigger handler specified")
+		}
+	}
+	if parameters.interval == 0 {
+		return nil, errors.New("no interval specified")
+	}
+
+	return &parameters, nil
+}

@@ -1,19 +1,23 @@
 package handlers
 
 import (
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/wealdtech/go-eth-listener/shared"
+	"github.com/attestantio/go-execution-client/spec"
+	"github.com/attestantio/go-execution-client/types"
 )
 
-// EventHandlerFunc defines the handler function
-type EventHandlerFunc func(*shared.AppContext, *types.Block, *types.Transaction, *types.Log)
-
-// Handle handles a Block
-func (f EventHandlerFunc) Handle(actx *shared.AppContext, blk *types.Block, tx *types.Transaction, event *types.Log) {
-	f(actx, blk, tx, event)
+// EventTrigger is a trigger for an event.
+type EventTrigger struct {
+	Name          string
+	Source        *types.Address
+	Topics        []types.Hash
+	EarliestBlock uint32
+	Handler       EventHandler
 }
 
-// EventHandler defines the methods that need to be implemented to handle events
+// EventHandlerFunc defines the handler function.
+type EventHandlerFunc func(event *spec.BerlinTransactionEvent, trigger *EventTrigger)
+
+// EventHandler defines the methods that need to be implemented to handle events.
 type EventHandler interface {
-	Handle(*shared.AppContext, *types.Block, *types.Transaction, *types.Log)
+	HandleEvent(event *spec.BerlinTransactionEvent, trigger *EventTrigger)
 }

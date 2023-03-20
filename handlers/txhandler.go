@@ -1,19 +1,23 @@
 package handlers
 
 import (
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/wealdtech/go-eth-listener/shared"
+	"github.com/attestantio/go-execution-client/spec"
+	"github.com/attestantio/go-execution-client/types"
 )
 
-// TxHandlerFunc defines the handler function
-type TxHandlerFunc func(*shared.AppContext, *types.Block, *types.Transaction)
-
-// Handle handles a transaction
-func (f TxHandlerFunc) Handle(actx *shared.AppContext, blk *types.Block, tx *types.Transaction) {
-	f(actx, blk, tx)
+// TxTrigger is a trigger for a transaction.
+type TxTrigger struct {
+	Name          string
+	From          *types.Address
+	To            *types.Address
+	EarliestBlock uint32
+	Handler       TxHandler
 }
 
-// TxHandler defines the methods that need to be implemented to handle transactions
+// TxHandlerFunc defines the handler function.
+type TxHandlerFunc func(tx *spec.Transaction, trigger *TxTrigger)
+
+// TxHandler defines the methods that need to be implemented to handle transactions.
 type TxHandler interface {
-	Handle(*shared.AppContext, *types.Block, *types.Transaction)
+	HandleTx(event *spec.Transaction, trigger *TxTrigger)
 }
