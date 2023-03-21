@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+
 	"github.com/attestantio/go-execution-client/spec"
 )
 
@@ -11,9 +13,9 @@ type BlockTrigger struct {
 }
 
 // BlockHandlerFunc defines the handler function.
-type BlockHandlerFunc func(event *spec.Block, trigger *BlockTrigger)
+type BlockHandlerFunc func(ctx context.Context, block *spec.Block, trigger *BlockTrigger)
 
 // BlockHandler defines the methods that need to be implemented to handle events.
 type BlockHandler interface {
-	HandleBlock(event *spec.Block, trigger *BlockTrigger)
+	HandleBlock(ctx context.Context, block *spec.Block, trigger *BlockTrigger)
 }

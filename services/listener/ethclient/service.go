@@ -31,6 +31,7 @@ import (
 type Service struct {
 	log                 zerolog.Logger
 	chainHeightProvider execclient.ChainHeightProvider
+	blocksProvider      execclient.BlocksProvider
 	eventsProvider      execclient.EventsProvider
 	blockTriggers       []*handlers.BlockTrigger
 	txTriggers          []*handlers.TxTrigger
@@ -65,6 +66,10 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 	if !isProvider {
 		return nil, errors.New("client does not provide chain height")
 	}
+	blocksProvider, isProvider := client.(execclient.BlocksProvider)
+	if !isProvider {
+		return nil, errors.New("client does not provide blocks")
+	}
 	eventsProvider, isProvider := client.(execclient.EventsProvider)
 	if !isProvider {
 		return nil, errors.New("client does not provide events")
@@ -72,6 +77,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 
 	s := &Service{
 		log:                 log,
+		blocksProvider:      blocksProvider,
 		eventsProvider:      eventsProvider,
 		blockTriggers:       parameters.blockTriggers,
 		txTriggers:          parameters.txTriggers,

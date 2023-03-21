@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+
 	"github.com/attestantio/go-execution-client/spec"
 	"github.com/attestantio/go-execution-client/types"
 )
@@ -15,9 +17,9 @@ type EventTrigger struct {
 }
 
 // EventHandlerFunc defines the handler function.
-type EventHandlerFunc func(event *spec.BerlinTransactionEvent, trigger *EventTrigger)
+type EventHandlerFunc func(ctx context.Context, event *spec.BerlinTransactionEvent, trigger *EventTrigger)
 
 // EventHandler defines the methods that need to be implemented to handle events.
 type EventHandler interface {
-	HandleEvent(event *spec.BerlinTransactionEvent, trigger *EventTrigger)
+	HandleEvent(ctx context.Context, event *spec.BerlinTransactionEvent, trigger *EventTrigger)
 }

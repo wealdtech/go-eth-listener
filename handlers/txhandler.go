@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+
 	"github.com/attestantio/go-execution-client/spec"
 	"github.com/attestantio/go-execution-client/types"
 )
@@ -15,9 +17,9 @@ type TxTrigger struct {
 }
 
 // TxHandlerFunc defines the handler function.
-type TxHandlerFunc func(tx *spec.Transaction, trigger *TxTrigger)
+type TxHandlerFunc func(ctx context.Context, tx *spec.Transaction, trigger *TxTrigger)
 
 // TxHandler defines the methods that need to be implemented to handle transactions.
 type TxHandler interface {
-	HandleTx(event *spec.Transaction, trigger *TxTrigger)
+	HandleTx(ctx context.Context, tx *spec.Transaction, trigger *TxTrigger)
 }
