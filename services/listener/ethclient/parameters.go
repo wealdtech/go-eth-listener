@@ -16,6 +16,7 @@ package ethclient
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/pebble"
@@ -26,16 +27,17 @@ import (
 )
 
 type parameters struct {
-	logLevel      zerolog.Level
-	monitor       metrics.Service
-	metadataDB    *pebble.DB
-	address       string
-	timeout       time.Duration
-	blockDelay    uint32
-	blockTriggers []*handlers.BlockTrigger
-	txTriggers    []*handlers.TxTrigger
-	eventTriggers []*handlers.EventTrigger
-	interval      time.Duration
+	logLevel       zerolog.Level
+	monitor        metrics.Service
+	metadataDB     *pebble.DB
+	address        string
+	timeout        time.Duration
+	blockDelay     uint32
+	blockSpecifier string
+	blockTriggers  []*handlers.BlockTrigger
+	txTriggers     []*handlers.TxTrigger
+	eventTriggers  []*handlers.EventTrigger
+	interval       time.Duration
 }
 
 // Parameter is the interface for service parameters.
@@ -86,9 +88,18 @@ func WithTimeout(timeout time.Duration) Parameter {
 
 // WithBlockDelay sets the number of blocks to delay before
 // passing on to the handlers, allowing avoidance of reorgs.
+// Ignored if block specifier is provided.
 func WithBlockDelay(delay uint32) Parameter {
 	return parameterFunc(func(p *parameters) {
 		p.blockDelay = delay
+	})
+}
+
+// WithBlockSpecifier sets the specifier for the block to handle.
+// This override block delay if supplied.
+func WithBlockSpecifier(specifier string) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.blockSpecifier = specifier
 	})
 }
 
@@ -170,6 +181,12 @@ func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	}
 	if parameters.interval == 0 {
 		return nil, errors.New("no interval specified")
+	}
+	if parameters.blockSpecifier != "" &&
+		parameters.blockSpecifier != "latest" &&
+		parameters.blockSpecifier != "safe" &&
+		parameters.blockSpecifier != "finalized" {
+		return nil, fmt.Errorf("unsupported block specifier %s", parameters.blockSpecifier)
 	}
 
 	return &parameters, nil

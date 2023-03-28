@@ -44,13 +44,25 @@ func (s *Service) listener(ctx context.Context,
 }
 
 func (s *Service) poll(ctx context.Context) {
+	var to uint32
 	// Select the highest block to work with.
-	chainHeight, err := s.chainHeightProvider.ChainHeight(ctx)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to get chain height for event poll")
-		return
+	if s.blockSpecifier != "" {
+		log.Trace().Str("specifier", s.blockSpecifier).Msg("Fetching chain height for specifier")
+		block, err := s.blocksProvider.Block(ctx, s.blockSpecifier)
+		if err != nil {
+			s.log.Error().Err(err).Msg("Failed to obtain block")
+			return
+		}
+		to = block.Number()
+	} else {
+		chainHeight, err := s.chainHeightProvider.ChainHeight(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to get chain height for event poll")
+			return
+		}
+		to = chainHeight - s.blockDelay
 	}
-	to := chainHeight - s.blockDelay
+	s.log.Trace().Uint32("to", to).Msg("Selected highest block")
 
 	switch {
 	case len(s.blockTriggers) > 0:
