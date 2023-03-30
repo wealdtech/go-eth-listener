@@ -55,6 +55,10 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 		log = log.Level(parameters.logLevel)
 	}
 
+	if err := registerMetrics(ctx, parameters.monitor); err != nil {
+		return nil, errors.Wrap(err, "failed to register metrics")
+	}
+
 	client, err := jsonrpcexecclient.New(ctx,
 		jsonrpcexecclient.WithLogLevel(util.LogLevel("execclient")),
 		jsonrpcexecclient.WithAddress(parameters.address),
