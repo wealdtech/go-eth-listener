@@ -87,6 +87,8 @@ func (s *Service) poll(ctx context.Context) {
 			monitorFailure()
 		}
 	}
+
+	monitorLatestBlock(to)
 }
 
 func (s *Service) pollBlocks(ctx context.Context,

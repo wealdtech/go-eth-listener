@@ -22,7 +22,10 @@ import (
 
 var metricsNamespace = "eth_listener"
 
-var failuresMetric prometheus.Counter
+var (
+	latestBlockMetric prometheus.Gauge
+	failuresMetric    prometheus.Counter
+)
 
 func registerMetrics(_ context.Context, monitor metrics.Service) error {
 	if failuresMetric != nil {
@@ -40,6 +43,16 @@ func registerMetrics(_ context.Context, monitor metrics.Service) error {
 }
 
 func registerPrometheusMetrics() error {
+	latestBlockMetric = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: metricsNamespace,
+		Subsystem: "ethclient",
+		Name:      "latest_block",
+		Help:      "The latest block processed",
+	})
+	if err := prometheus.Register(latestBlockMetric); err != nil {
+		return err
+	}
+
 	failuresMetric = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: metricsNamespace,
 		Subsystem: "ethclient",
@@ -47,6 +60,12 @@ func registerPrometheusMetrics() error {
 		Help:      "The number of failures.",
 	})
 	return prometheus.Register(failuresMetric)
+}
+
+func monitorLatestBlock(block uint32) {
+	if latestBlockMetric != nil {
+		latestBlockMetric.Set(float64(block))
+	}
 }
 
 func monitorFailure() {
