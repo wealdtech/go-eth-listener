@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-execution-client/api"
+	"github.com/attestantio/go-execution-client/types"
 	executil "github.com/attestantio/go-execution-client/util"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -201,15 +202,32 @@ func (s *Service) pollEvents(ctx context.Context,
 			return nil
 		}
 
+		// Resolve the source.
+		var source *types.Address
+		switch {
+		case trigger.SourceResolver != nil:
+			source, err = trigger.SourceResolver.Resolve(ctx)
+			if err != nil {
+				return errors.Wrap(err, "failed to resolve source")
+			}
+		case trigger.Source != nil:
+			source = trigger.Source
+		default:
+			return errors.New("no source")
+		}
+		if source == nil {
+			return errors.New("source resolution returned nil")
+		}
+
 		if to+1-from > maxBlocksForEvents {
 			to = from + maxBlocksForEvents - 1
 		}
-		s.log.Trace().Str("trigger", trigger.Name).Uint32("from", from).Uint32("to", to).Msg("Fetching events")
+		s.log.Trace().Stringer("source", source).Str("trigger", trigger.Name).Uint32("from", from).Uint32("to", to).Msg("Fetching events")
 
 		filter := &api.EventsFilter{
 			FromBlock: executil.MarshalUint32(from),
 			ToBlock:   executil.MarshalUint32(to),
-			Address:   trigger.Source,
+			Address:   source,
 			Topics:    trigger.Topics,
 		}
 		events, err := s.eventsProvider.Events(ctx, filter)
