@@ -17,6 +17,7 @@ package ethclient
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/pebble"
@@ -138,7 +139,7 @@ func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 		monitor:  nullmetrics.New(),
 	}
 	for _, p := range params {
-		if params != nil {
+		if p != nil {
 			p.apply(&parameters)
 		}
 	}
@@ -155,39 +156,51 @@ func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	if parameters.address == "" {
 		return nil, errors.New("no address specified")
 	}
-	for _, blockTrigger := range parameters.blockTriggers {
-		if blockTrigger.Name == "" {
-			return nil, errors.New("no block trigger name specified")
-		}
-		if blockTrigger.Handler == nil {
-			return nil, errors.New("no block trigger handler specified")
-		}
-	}
-	for _, txTrigger := range parameters.txTriggers {
-		if txTrigger.Name == "" {
-			return nil, errors.New("no transaction trigger name specified")
-		}
-		if txTrigger.Handler == nil {
-			return nil, errors.New("no transaction trigger handler specified")
-		}
-	}
-	for _, eventTrigger := range parameters.eventTriggers {
-		if eventTrigger.Name == "" {
-			return nil, errors.New("no event trigger name specified")
-		}
-		if eventTrigger.Handler == nil {
-			return nil, errors.New("no event trigger handler specified")
-		}
+	if err := checkTriggerParameters(&parameters); err != nil {
+		return nil, err
 	}
 	if parameters.interval == 0 {
 		return nil, errors.New("no interval specified")
 	}
-	if parameters.blockSpecifier != "" &&
-		parameters.blockSpecifier != "latest" &&
-		parameters.blockSpecifier != "safe" &&
-		parameters.blockSpecifier != "finalized" {
+
+	validBlockSpecifiers := map[string]struct{}{
+		"":          {},
+		"latest":    {},
+		"safe":      {},
+		"finalized": {},
+	}
+	if _, exists := validBlockSpecifiers[strings.ToLower(parameters.blockSpecifier)]; !exists {
 		return nil, fmt.Errorf("unsupported block specifier %s", parameters.blockSpecifier)
 	}
 
 	return &parameters, nil
+}
+
+func checkTriggerParameters(parameters *parameters) error {
+	for _, blockTrigger := range parameters.blockTriggers {
+		if blockTrigger.Name == "" {
+			return errors.New("no block trigger name specified")
+		}
+		if blockTrigger.Handler == nil {
+			return errors.New("no block trigger handler specified")
+		}
+	}
+	for _, txTrigger := range parameters.txTriggers {
+		if txTrigger.Name == "" {
+			return errors.New("no transaction trigger name specified")
+		}
+		if txTrigger.Handler == nil {
+			return errors.New("no transaction trigger handler specified")
+		}
+	}
+	for _, eventTrigger := range parameters.eventTriggers {
+		if eventTrigger.Name == "" {
+			return errors.New("no event trigger name specified")
+		}
+		if eventTrigger.Handler == nil {
+			return errors.New("no event trigger handler specified")
+		}
+	}
+
+	return nil
 }

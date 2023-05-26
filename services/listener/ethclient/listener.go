@@ -23,6 +23,7 @@ import (
 	executil "github.com/attestantio/go-execution-client/util"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
+	"github.com/wealdtech/go-eth-listener/handlers"
 )
 
 // Maximum number of blocks to fetch for events.
@@ -141,37 +142,47 @@ func (s *Service) pollTxs(ctx context.Context,
 	}
 
 	for height := from; height <= to; height++ {
-		block, err := s.blocksProvider.Block(ctx, executil.MarshalUint32(height))
-		if err != nil {
-			return errors.Wrap(err, "failed to obtain block for transactions")
-		}
-		for _, trigger := range s.txTriggers {
-			if block.Number() < trigger.EarliestBlock {
-				log.Trace().Str("trigger", trigger.Name).Uint32("block_height", block.Number()).Msg("Block too early; ignoring")
-				continue
-			}
-			for i, tx := range block.Transactions() {
-				if trigger.From != nil {
-					txFrom := tx.From()
-					if !bytes.Equal(trigger.From[:], txFrom[:]) {
-						log.Trace().Str("trigger", trigger.Name).Uint32("block_height", block.Number()).Int("index", i).Msg("From does not match; ignoring")
-						continue
-					}
-				}
-				if trigger.To != nil {
-					txTo := tx.To()
-					if !bytes.Equal(trigger.To[:], txTo[:]) {
-						log.Trace().Str("trigger", trigger.Name).Uint32("block_height", block.Number()).Int("index", i).Msg("To does not match; ignoring")
-						continue
-					}
-				}
-				trigger.Handler.HandleTx(ctx, tx, trigger)
-			}
+		if err := s.pollBlockTxs(ctx, height); err != nil {
+			return err
 		}
 
 		md.LatestBlock = int32(height)
 		if err := s.setTransactionsMetadata(ctx, md); err != nil {
 			return errors.Wrap(err, "failed to set metadata after trasaction poll")
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) pollBlockTxs(ctx context.Context, height uint32) error {
+	block, err := s.blocksProvider.Block(ctx, executil.MarshalUint32(height))
+	if err != nil {
+		return errors.Wrap(err, "failed to obtain block for transactions")
+	}
+	log := log.With().Uint32("block_height", block.Number()).Logger()
+	for _, trigger := range s.txTriggers {
+		log := log.With().Str("trigger", trigger.Name).Logger()
+		if block.Number() < trigger.EarliestBlock {
+			log.Trace().Msg("Block too early; ignoring")
+			continue
+		}
+		for i, tx := range block.Transactions() {
+			if trigger.From != nil {
+				txFrom := tx.From()
+				if !bytes.Equal(trigger.From[:], txFrom[:]) {
+					log.Trace().Int("index", i).Msg("From does not match; ignoring")
+					continue
+				}
+			}
+			if trigger.To != nil {
+				txTo := tx.To()
+				if !bytes.Equal(trigger.To[:], txTo[:]) {
+					log.Trace().Int("index", i).Msg("To does not match; ignoring")
+					continue
+				}
+			}
+			trigger.Handler.HandleTx(ctx, tx, trigger)
 		}
 	}
 
@@ -202,46 +213,59 @@ func (s *Service) pollEvents(ctx context.Context,
 			return nil
 		}
 
-		// Resolve the source.
-		var source *types.Address
-		switch {
-		case trigger.SourceResolver != nil:
-			source, err = trigger.SourceResolver.Resolve(ctx)
-			if err != nil {
-				return errors.Wrap(err, "failed to resolve source")
-			}
-		case trigger.Source != nil:
-			source = trigger.Source
-		default:
-			return errors.New("no source")
-		}
-		if source == nil {
-			return errors.New("source resolution returned nil")
-		}
-
-		if to+1-from > maxBlocksForEvents {
-			to = from + maxBlocksForEvents - 1
-		}
-		s.log.Trace().Stringer("source", source).Str("trigger", trigger.Name).Uint32("from", from).Uint32("to", to).Msg("Fetching events")
-
-		filter := &api.EventsFilter{
-			FromBlock: executil.MarshalUint32(from),
-			ToBlock:   executil.MarshalUint32(to),
-			Address:   source,
-			Topics:    trigger.Topics,
-		}
-		events, err := s.eventsProvider.Events(ctx, filter)
-		if err != nil {
-			return errors.Wrap(err, "failed to obtain events")
-		}
-		for _, event := range events {
-			trigger.Handler.HandleEvent(ctx, event, trigger)
+		if err := s.pollEventsForTrigger(ctx, trigger, from, to); err != nil {
+			return err
 		}
 
 		md.LatestBlocks[trigger.Name] = to
 		if err := s.setEventsMetadata(ctx, md); err != nil {
 			return errors.Wrap(err, "failed to set metadata after event poll")
 		}
+	}
+
+	return nil
+}
+
+func (s *Service) pollEventsForTrigger(ctx context.Context,
+	trigger *handlers.EventTrigger,
+	from uint32,
+	to uint32,
+) error {
+	// Resolve the source.
+	var source *types.Address
+	var err error
+	switch {
+	case trigger.SourceResolver != nil:
+		source, err = trigger.SourceResolver.Resolve(ctx)
+		if err != nil {
+			return errors.Wrap(err, "failed to resolve source")
+		}
+	case trigger.Source != nil:
+		source = trigger.Source
+	default:
+		return errors.New("no source")
+	}
+	if source == nil {
+		return errors.New("source resolution returned nil")
+	}
+
+	if to+1-from > maxBlocksForEvents {
+		to = from + maxBlocksForEvents - 1
+	}
+	s.log.Trace().Stringer("source", source).Str("trigger", trigger.Name).Uint32("from", from).Uint32("to", to).Msg("Fetching events")
+
+	filter := &api.EventsFilter{
+		FromBlock: executil.MarshalUint32(from),
+		ToBlock:   executil.MarshalUint32(to),
+		Address:   source,
+		Topics:    trigger.Topics,
+	}
+	events, err := s.eventsProvider.Events(ctx, filter)
+	if err != nil {
+		return errors.Wrap(err, "failed to obtain events")
+	}
+	for _, event := range events {
+		trigger.Handler.HandleEvent(ctx, event, trigger)
 	}
 
 	return nil

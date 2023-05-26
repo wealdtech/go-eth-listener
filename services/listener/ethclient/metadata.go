@@ -47,6 +47,7 @@ func (s *Service) getBlocksMetadata(_ context.Context) (*blocksMetadata, error) 
 				LatestBlock: -1,
 			}, nil
 		}
+
 		return nil, errors.Wrap(err, "failed to get blocks metadata")
 	}
 
@@ -83,6 +84,7 @@ func (s *Service) getTransactionsMetadata(_ context.Context) (*transactionsMetad
 				LatestBlock: -1,
 			}, nil
 		}
+
 		return nil, errors.Wrap(err, "failed to get transactions metadata")
 	}
 
@@ -119,6 +121,7 @@ func (s *Service) getEventsMetadata(_ context.Context) (*eventsMetadata, error) 
 				LatestBlocks: map[string]uint32{},
 			}, nil
 		}
+
 		return nil, errors.Wrap(err, "failed to get events metadata")
 	}
 
