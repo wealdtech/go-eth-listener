@@ -1,4 +1,4 @@
-// Copyright © 2023 Weald Technology Limited.
+// Copyright © 2023, 2024 Weald Technology Limited.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -213,6 +213,10 @@ func (s *Service) pollEvents(ctx context.Context,
 			return nil
 		}
 
+		if to+1-from > maxBlocksForEvents {
+			to = from + maxBlocksForEvents - 1
+		}
+
 		if err := s.pollEventsForTrigger(ctx, trigger, from, to); err != nil {
 			return err
 		}
@@ -249,9 +253,6 @@ func (s *Service) pollEventsForTrigger(ctx context.Context,
 		return errors.New("source resolution returned nil")
 	}
 
-	if to+1-from > maxBlocksForEvents {
-		to = from + maxBlocksForEvents - 1
-	}
 	s.log.Trace().Stringer("source", source).Str("trigger", trigger.Name).Uint32("from", from).Uint32("to", to).Msg("Fetching events")
 
 	filter := &api.EventsFilter{

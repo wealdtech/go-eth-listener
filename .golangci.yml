@@ -130,6 +130,7 @@ linters:
   # https://golangci-lint.run/usage/linters/#disabled-by-default
   disable:
     - deadcode
+    - depguard
     - dupl
     - exhaustivestruct
     - exhaustruct
@@ -142,6 +143,7 @@ linters:
     - ireturn
     - maligned
     - nosnakecase
+    - perfsprint
     - scopelint
     - structcheck
     - varcheck
