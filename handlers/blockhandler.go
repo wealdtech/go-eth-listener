@@ -8,8 +8,9 @@ import (
 
 // BlockTrigger is a trigger for a block.
 type BlockTrigger struct {
-	Name    string
-	Handler BlockHandler
+	Name          string
+	EarliestBlock uint32
+	Handler       BlockHandler
 }
 
 // BlockHandlerFunc defines the handler function.

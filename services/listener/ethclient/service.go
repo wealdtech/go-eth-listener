@@ -39,6 +39,7 @@ type Service struct {
 	interval            time.Duration
 	blockDelay          uint32
 	blockSpecifier      string
+	earliestBlock       int32
 	metadataDB          *pebble.DB
 }
 
@@ -89,6 +90,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 		eventTriggers:       parameters.eventTriggers,
 		blockDelay:          parameters.blockDelay,
 		blockSpecifier:      parameters.blockSpecifier,
+		earliestBlock:       parameters.earliestBlock,
 		metadataDB:          parameters.metadataDB,
 		chainHeightProvider: chainHeightProvider,
 		interval:            parameters.interval,

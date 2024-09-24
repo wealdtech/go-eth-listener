@@ -35,6 +35,7 @@ type parameters struct {
 	timeout        time.Duration
 	blockDelay     uint32
 	blockSpecifier string
+	earliestBlock  int32
 	blockTriggers  []*handlers.BlockTrigger
 	txTriggers     []*handlers.TxTrigger
 	eventTriggers  []*handlers.EventTrigger
@@ -104,6 +105,13 @@ func WithBlockSpecifier(specifier string) Parameter {
 	})
 }
 
+// WithEarliestBlock sets the block number from which to start listening.
+func WithEarliestBlock(block int32) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.earliestBlock = block
+	})
+}
+
 // WithBlockTriggers sets the block triggers for the listener.
 func WithBlockTriggers(triggers []*handlers.BlockTrigger) Parameter {
 	return parameterFunc(func(p *parameters) {
@@ -135,8 +143,9 @@ func WithInterval(interval time.Duration) Parameter {
 // parseAndCheckParameters parses and checks parameters to ensure that mandatory parameters are present and correct.
 func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	parameters := parameters{
-		logLevel: zerolog.GlobalLevel(),
-		monitor:  nullmetrics.New(),
+		logLevel:      zerolog.GlobalLevel(),
+		monitor:       nullmetrics.New(),
+		earliestBlock: -1,
 	}
 	for _, p := range params {
 		if p != nil {

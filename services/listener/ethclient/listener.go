@@ -27,7 +27,7 @@ import (
 )
 
 // Maximum number of blocks to fetch for events.
-var maxBlocksForEvents = uint32(100)
+const maxBlocksForEvents = uint32(100)
 
 func (s *Service) listener(ctx context.Context,
 ) {
@@ -46,27 +46,35 @@ func (s *Service) listener(ctx context.Context,
 	}
 }
 
-func (s *Service) poll(ctx context.Context) {
+func (s *Service) selectHighestBlock(ctx context.Context) (uint32, error) {
 	var to uint32
-	// Select the highest block to work with.
+	// Select the highest block with which to work, based on the specifier or the block delay.
 	if s.blockSpecifier != "" {
 		log.Trace().Str("specifier", s.blockSpecifier).Msg("Fetching chain height for specifier")
 		block, err := s.blocksProvider.Block(ctx, s.blockSpecifier)
 		if err != nil {
-			s.log.Error().Err(err).Msg("Failed to obtain block")
-			monitorFailure()
-			return
+			return 0, errors.Wrap(err, "failed to obtain block")
 		}
 		to = block.Number()
 	} else {
 		chainHeight, err := s.chainHeightProvider.ChainHeight(ctx)
 		if err != nil {
-			log.Error().Err(err).Msg("Failed to get chain height for event poll")
-			monitorFailure()
-			return
+			return 0, errors.Wrap(err, "failed to get chain height for event poll")
 		}
 		to = chainHeight - s.blockDelay
 	}
+
+	return to, nil
+}
+
+func (s *Service) poll(ctx context.Context) {
+	to, err := s.selectHighestBlock(ctx)
+	if err != nil {
+		s.log.Error().Err(err).Msg("Failed to select highest block")
+		monitorFailure()
+		return
+	}
+
 	s.log.Trace().Uint32("to", to).Msg("Selected highest block")
 
 	switch {
@@ -102,6 +110,10 @@ func (s *Service) pollBlocks(ctx context.Context,
 	}
 
 	from := uint32(md.LatestBlock + 1)
+	if s.earliestBlock != -1 {
+		from = uint32(s.earliestBlock)
+		s.earliestBlock = -1
+	}
 
 	if from > to {
 		s.log.Trace().Uint32("from", from).Uint32("to", to).Msg("Not fetching blocks")
@@ -135,6 +147,10 @@ func (s *Service) pollTxs(ctx context.Context,
 	}
 
 	from := uint32(md.LatestBlock + 1)
+	if s.earliestBlock != -1 {
+		from = uint32(s.earliestBlock)
+		s.earliestBlock = -1
+	}
 
 	if from > to {
 		s.log.Trace().Uint32("from", from).Uint32("to", to).Msg("Not fetching blocks for transactions")
