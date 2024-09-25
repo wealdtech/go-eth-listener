@@ -20,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/pebble"
 	"github.com/rs/zerolog"
 	"github.com/wealdtech/go-eth-listener/handlers"
 	"github.com/wealdtech/go-eth-listener/services/metrics"
@@ -30,7 +29,7 @@ import (
 type parameters struct {
 	logLevel       zerolog.Level
 	monitor        metrics.Service
-	metadataDB     *pebble.DB
+	metadataDBPath string
 	address        string
 	timeout        time.Duration
 	blockDelay     uint32
@@ -67,10 +66,10 @@ func WithMonitor(monitor metrics.Service) Parameter {
 	})
 }
 
-// WithMetadataDB sets the metadata database.
-func WithMetadataDB(db *pebble.DB) Parameter {
+// WithMetadataDBPath sets the path of the metadata database.
+func WithMetadataDBPath(path string) Parameter {
 	return parameterFunc(func(p *parameters) {
-		p.metadataDB = db
+		p.metadataDBPath = path
 	})
 }
 
@@ -156,14 +155,14 @@ func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	if parameters.monitor == nil {
 		return nil, errors.New("no monitor specified")
 	}
-	if parameters.metadataDB == nil {
-		return nil, errors.New("no metadata database specified")
-	}
 	if parameters.timeout == 0 {
 		return nil, errors.New("no timeout specified")
 	}
 	if parameters.address == "" {
 		return nil, errors.New("no address specified")
+	}
+	if parameters.metadataDBPath == "" {
+		return nil, errors.New("no metadata db path specified")
 	}
 	if err := checkTriggerParameters(&parameters); err != nil {
 		return nil, err

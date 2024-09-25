@@ -40,6 +40,12 @@ type eventsMetadata struct {
 }
 
 func (s *Service) getBlocksMetadata(_ context.Context) (*blocksMetadata, error) {
+	s.metadataDBMu.Lock()
+	defer s.metadataDBMu.Unlock()
+	if !s.metadataDBOpen.Load() {
+		return nil, errors.New("database closed")
+	}
+
 	data, closer, err := s.metadataDB.Get(blocksMetadataKey)
 	if err != nil {
 		if errors.Is(err, pebble.ErrNotFound) {
@@ -64,6 +70,12 @@ func (s *Service) getBlocksMetadata(_ context.Context) (*blocksMetadata, error) 
 }
 
 func (s *Service) setBlocksMetadata(_ context.Context, md *blocksMetadata) error {
+	s.metadataDBMu.Lock()
+	defer s.metadataDBMu.Unlock()
+	if !s.metadataDBOpen.Load() {
+		return errors.New("database closed")
+	}
+
 	data, err := json.Marshal(md)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal blocks metadata")
@@ -77,6 +89,12 @@ func (s *Service) setBlocksMetadata(_ context.Context, md *blocksMetadata) error
 }
 
 func (s *Service) getTransactionsMetadata(_ context.Context) (*transactionsMetadata, error) {
+	s.metadataDBMu.Lock()
+	defer s.metadataDBMu.Unlock()
+	if !s.metadataDBOpen.Load() {
+		return nil, errors.New("database closed")
+	}
+
 	data, closer, err := s.metadataDB.Get(transactionsMetadataKey)
 	if err != nil {
 		if errors.Is(err, pebble.ErrNotFound) {
@@ -101,6 +119,12 @@ func (s *Service) getTransactionsMetadata(_ context.Context) (*transactionsMetad
 }
 
 func (s *Service) setTransactionsMetadata(_ context.Context, md *transactionsMetadata) error {
+	s.metadataDBMu.Lock()
+	defer s.metadataDBMu.Unlock()
+	if !s.metadataDBOpen.Load() {
+		return errors.New("database closed")
+	}
+
 	data, err := json.Marshal(md)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal transactions metadata")
@@ -114,6 +138,12 @@ func (s *Service) setTransactionsMetadata(_ context.Context, md *transactionsMet
 }
 
 func (s *Service) getEventsMetadata(_ context.Context) (*eventsMetadata, error) {
+	s.metadataDBMu.Lock()
+	defer s.metadataDBMu.Unlock()
+	if !s.metadataDBOpen.Load() {
+		return nil, errors.New("database closed")
+	}
+
 	data, closer, err := s.metadataDB.Get(eventsMetadataKey)
 	if err != nil {
 		if errors.Is(err, pebble.ErrNotFound) {
@@ -138,6 +168,12 @@ func (s *Service) getEventsMetadata(_ context.Context) (*eventsMetadata, error) 
 }
 
 func (s *Service) setEventsMetadata(_ context.Context, md *eventsMetadata) error {
+	s.metadataDBMu.Lock()
+	defer s.metadataDBMu.Unlock()
+	if !s.metadataDBOpen.Load() {
+		return errors.New("database closed")
+	}
+
 	data, err := json.Marshal(md)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal events metadata")

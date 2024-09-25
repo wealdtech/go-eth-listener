@@ -40,7 +40,7 @@ func (s *Service) listener(ctx context.Context,
 		case <-time.After(s.interval):
 			s.poll(ctx)
 		case <-ctx.Done():
-			s.log.Debug().Msg("Context cancelled")
+			s.log.Debug().Msg("Context done")
 			return
 		}
 	}
@@ -50,18 +50,19 @@ func (s *Service) selectHighestBlock(ctx context.Context) (uint32, error) {
 	var to uint32
 	// Select the highest block with which to work, based on the specifier or the block delay.
 	if s.blockSpecifier != "" {
-		log.Trace().Str("specifier", s.blockSpecifier).Msg("Fetching chain height for specifier")
 		block, err := s.blocksProvider.Block(ctx, s.blockSpecifier)
 		if err != nil {
 			return 0, errors.Wrap(err, "failed to obtain block")
 		}
 		to = block.Number()
+		log.Trace().Str("specifier", s.blockSpecifier).Uint32("height", to).Msg("Obtained chain height with specifier")
 	} else {
 		chainHeight, err := s.chainHeightProvider.ChainHeight(ctx)
 		if err != nil {
 			return 0, errors.Wrap(err, "failed to get chain height for event poll")
 		}
 		to = chainHeight - s.blockDelay
+		log.Trace().Uint32("block_delay", s.blockDelay).Uint32("height", to).Msg("Obtained chain height with delay")
 	}
 
 	return to, nil
@@ -80,22 +81,20 @@ func (s *Service) poll(ctx context.Context) {
 	switch {
 	case len(s.blockTriggers) > 0:
 		// We have block triggers, fetch full blocks.
-		if err := s.pollBlocks(ctx, to); err != nil {
-			log.Error().Err(err).Msg("Failure to poll blocks")
-			monitorFailure()
-		}
+		s.log.Trace().Msg("Polling blocks")
+		err = s.pollBlocks(ctx, to)
 	case len(s.txTriggers) > 0:
 		// We have transaction triggers, fetch full blocks.
-		if err := s.pollTxs(ctx, to); err != nil {
-			log.Error().Err(err).Msg("Failure to poll transactions")
-			monitorFailure()
-		}
+		s.log.Trace().Msg("Polling blocks for transactions")
+		err = s.pollTxs(ctx, to)
 	case len(s.eventTriggers) > 0:
 		// We have event triggers, fetch events only.
-		if err := s.pollEvents(ctx, to); err != nil {
-			log.Error().Err(err).Msg("Failure to poll events")
-			monitorFailure()
-		}
+		s.log.Trace().Msg("Polling events")
+		err = s.pollEvents(ctx, to)
+	}
+	if err != nil && ctx.Err() == nil {
+		log.Error().Err(err).Msg("Poll failed")
+		monitorFailure()
 	}
 
 	monitorLatestBlock(to)
@@ -114,13 +113,13 @@ func (s *Service) pollBlocks(ctx context.Context,
 		from = uint32(s.earliestBlock)
 		s.earliestBlock = -1
 	}
-
+	s.log.Trace().Uint32("from", from).Uint32("to", to).Msg("Polling blocks in range")
 	if from > to {
-		s.log.Trace().Uint32("from", from).Uint32("to", to).Msg("Not fetching blocks")
 		return nil
 	}
 
 	for height := from; height <= to; height++ {
+		s.log.Trace().Uint32("block", height).Msg("Handling block")
 		block, err := s.blocksProvider.Block(ctx, executil.MarshalUint32(height))
 		if err != nil {
 			return errors.Wrap(err, "failed to obtain block")

@@ -15,6 +15,8 @@ package ethclient
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	execclient "github.com/attestantio/go-execution-client"
@@ -41,6 +43,8 @@ type Service struct {
 	blockSpecifier      string
 	earliestBlock       int32
 	metadataDB          *pebble.DB
+	metadataDBMu        sync.Mutex
+	metadataDBOpen      atomic.Bool
 }
 
 // New creates a new service.
@@ -60,29 +64,19 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 		return nil, errors.Wrap(err, "failed to register metrics")
 	}
 
-	client, err := jsonrpcexecclient.New(ctx,
-		jsonrpcexecclient.WithLogLevel(util.LogLevel("execclient")),
-		jsonrpcexecclient.WithAddress(parameters.address),
-		jsonrpcexecclient.WithTimeout(parameters.timeout),
-	)
+	chainHeightProvider, blocksProvider, eventsProvider, err := setupProviders(ctx, parameters)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to connect to Ethereum client")
+		return nil, err
 	}
-	chainHeightProvider, isProvider := client.(execclient.ChainHeightProvider)
-	if !isProvider {
-		return nil, errors.New("client does not provide chain height")
-	}
-	blocksProvider, isProvider := client.(execclient.BlocksProvider)
-	if !isProvider {
-		return nil, errors.New("client does not provide blocks")
-	}
-	eventsProvider, isProvider := client.(execclient.EventsProvider)
-	if !isProvider {
-		return nil, errors.New("client does not provide events")
+
+	metadataDB, err := pebble.Open(parameters.metadataDBPath, &pebble.Options{})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to start metadata database")
 	}
 
 	s := &Service{
 		log:                 log,
+		metadataDB:          metadataDB,
 		blocksProvider:      blocksProvider,
 		eventsProvider:      eventsProvider,
 		blockTriggers:       parameters.blockTriggers,
@@ -91,13 +85,59 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 		blockDelay:          parameters.blockDelay,
 		blockSpecifier:      parameters.blockSpecifier,
 		earliestBlock:       parameters.earliestBlock,
-		metadataDB:          parameters.metadataDB,
 		chainHeightProvider: chainHeightProvider,
 		interval:            parameters.interval,
 	}
+
+	// Note that the metadata DB is open.
+	s.metadataDBOpen.Store(true)
+
+	// Close the database on context done.
+	go func(ctx context.Context, metadataDB *pebble.DB) {
+		<-ctx.Done()
+		s.metadataDBMu.Lock()
+		err := metadataDB.Close()
+		s.metadataDBOpen.Store(false)
+		s.metadataDBMu.Unlock()
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to close pebble")
+		}
+	}(ctx, metadataDB)
 
 	// Kick off the listener.
 	go s.listener(ctx)
 
 	return s, nil
+}
+
+func setupProviders(ctx context.Context,
+	parameters *parameters,
+) (
+	execclient.ChainHeightProvider,
+	execclient.BlocksProvider,
+	execclient.EventsProvider,
+	error,
+) {
+	client, err := jsonrpcexecclient.New(ctx,
+		jsonrpcexecclient.WithLogLevel(util.LogLevel("execclient")),
+		jsonrpcexecclient.WithAddress(parameters.address),
+		jsonrpcexecclient.WithTimeout(parameters.timeout),
+	)
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "failed to connect to Ethereum client")
+	}
+	chainHeightProvider, isProvider := client.(execclient.ChainHeightProvider)
+	if !isProvider {
+		return nil, nil, nil, errors.New("client does not provide chain height")
+	}
+	blocksProvider, isProvider := client.(execclient.BlocksProvider)
+	if !isProvider {
+		return nil, nil, nil, errors.New("client does not provide blocks")
+	}
+	eventsProvider, isProvider := client.(execclient.EventsProvider)
+	if !isProvider {
+		return nil, nil, nil, errors.New("client does not provide events")
+	}
+
+	return chainHeightProvider, blocksProvider, eventsProvider, nil
 }
