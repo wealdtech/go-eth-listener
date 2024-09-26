@@ -22,7 +22,6 @@ import (
 	"github.com/attestantio/go-execution-client/types"
 	executil "github.com/attestantio/go-execution-client/util"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog/log"
 	"github.com/wealdtech/go-eth-listener/handlers"
 )
 
@@ -55,14 +54,14 @@ func (s *Service) selectHighestBlock(ctx context.Context) (uint32, error) {
 			return 0, errors.Wrap(err, "failed to obtain block")
 		}
 		to = block.Number()
-		log.Trace().Str("specifier", s.blockSpecifier).Uint32("height", to).Msg("Obtained chain height with specifier")
+		s.log.Trace().Str("specifier", s.blockSpecifier).Uint32("height", to).Msg("Obtained chain height with specifier")
 	} else {
 		chainHeight, err := s.chainHeightProvider.ChainHeight(ctx)
 		if err != nil {
 			return 0, errors.Wrap(err, "failed to get chain height for event poll")
 		}
 		to = chainHeight - s.blockDelay
-		log.Trace().Uint32("block_delay", s.blockDelay).Uint32("height", to).Msg("Obtained chain height with delay")
+		s.log.Trace().Uint32("block_delay", s.blockDelay).Uint32("height", to).Msg("Obtained chain height with delay")
 	}
 
 	return to, nil
@@ -93,7 +92,7 @@ func (s *Service) poll(ctx context.Context) {
 		err = s.pollEvents(ctx, to)
 	}
 	if err != nil && ctx.Err() == nil {
-		log.Error().Err(err).Msg("Poll failed")
+		s.log.Error().Err(err).Msg("Poll failed")
 		monitorFailure()
 	}
 
@@ -175,7 +174,7 @@ func (s *Service) pollBlockTxs(ctx context.Context, height uint32) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to obtain block for transactions")
 	}
-	log := log.With().Uint32("block_height", block.Number()).Logger()
+	log := s.log.With().Uint32("block_height", block.Number()).Logger()
 	for _, trigger := range s.txTriggers {
 		log := log.With().Str("trigger", trigger.Name).Logger()
 		if block.Number() < trigger.EarliestBlock {
