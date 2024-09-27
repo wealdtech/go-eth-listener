@@ -28,7 +28,7 @@ var (
 )
 
 type blocksMetadata struct {
-	LatestBlock int32 `json:"latest_block"`
+	LatestBlocks map[string]int32 `json:"latest_blocks"`
 }
 
 type transactionsMetadata struct {
@@ -46,12 +46,14 @@ func (s *Service) getBlocksMetadata(_ context.Context) (*blocksMetadata, error) 
 		return nil, errors.New("database closed")
 	}
 
+	res := &blocksMetadata{
+		LatestBlocks: map[string]int32{},
+	}
+
 	data, closer, err := s.metadataDB.Get(blocksMetadataKey)
 	if err != nil {
 		if errors.Is(err, pebble.ErrNotFound) {
-			return &blocksMetadata{
-				LatestBlock: -1,
-			}, nil
+			return res, nil
 		}
 
 		return nil, errors.Wrap(err, "failed to get blocks metadata")
@@ -61,7 +63,6 @@ func (s *Service) getBlocksMetadata(_ context.Context) (*blocksMetadata, error) 
 		return nil, errors.Wrap(err, "failed to close blocks metadata")
 	}
 
-	res := &blocksMetadata{}
 	if err := json.Unmarshal(data, res); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal blocks metadata")
 	}

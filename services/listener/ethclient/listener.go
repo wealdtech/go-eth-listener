@@ -107,16 +107,13 @@ func (s *Service) pollBlocks(ctx context.Context,
 		return errors.Wrap(err, "failed to get metadata for block poll")
 	}
 
-	from := uint32(md.LatestBlock + 1)
-	if s.earliestBlock != -1 {
-		from = uint32(s.earliestBlock)
-		s.earliestBlock = -1
-	}
+	from := s.calculateBlocksFrom(ctx, md)
 	s.log.Trace().Uint32("from", from).Uint32("to", to).Msg("Polling blocks in range")
 	if from > to {
 		return nil
 	}
 
+	failed := make(map[string]bool)
 	for height := from; height <= to; height++ {
 		s.log.Trace().Uint32("block", height).Msg("Handling block")
 		block, err := s.blocksProvider.Block(ctx, executil.MarshalUint32(height))
@@ -124,16 +121,61 @@ func (s *Service) pollBlocks(ctx context.Context,
 			return errors.Wrap(err, "failed to obtain block")
 		}
 		for _, trigger := range s.blockTriggers {
-			trigger.Handler.HandleBlock(ctx, block, trigger)
+			if failed[trigger.Name] {
+				// The trigger already reported a failure in this run, so don't run for future blocks.
+				continue
+			}
+			if md.LatestBlocks[trigger.Name] >= int32(height) {
+				// The trigger has already successfully processed this block.
+				continue
+			}
+			if err := trigger.Handler.HandleBlock(ctx, block, trigger); err != nil {
+				s.log.Debug().Str("trigger", trigger.Name).Uint32("block", height).Err(err).Msg("Trigger failed to handle block")
+				// The trigger has reported a failure.  We stop here for this trigger and don't update its metadata.
+				failed[trigger.Name] = true
+
+				continue
+			}
+			md.LatestBlocks[trigger.Name] = int32(height)
 		}
 
-		md.LatestBlock = int32(height)
 		if err := s.setBlocksMetadata(ctx, md); err != nil {
 			return errors.Wrap(err, "failed to set metadata after block poll")
 		}
 	}
 
 	return nil
+}
+
+const maxUint32 = uint32(0xffffffff)
+
+// calculateBlocksFrom calculates the earliest block which we need to fetch.
+func (s *Service) calculateBlocksFrom(_ context.Context, md *blocksMetadata) uint32 {
+	var from uint32
+
+	switch {
+	case s.earliestBlock > -1:
+		// There is a hard-coded earliest block passed to us in configuration, so we must start there.
+		// We have to reset the metadata, otherwise blocks won't be reprocessed.
+		from = uint32(s.earliestBlock)
+		for name := range md.LatestBlocks {
+			md.LatestBlocks[name] = s.earliestBlock
+		}
+		s.earliestBlock = -1
+	case len(md.LatestBlocks) > 0:
+		// Work out the earliest block from our existing metadata.
+		from = maxUint32
+		for _, latest := range md.LatestBlocks {
+			if from > uint32(latest+1) {
+				from = uint32(latest + 1)
+			}
+		}
+	default:
+		// Means that there is no metadata or hard-coded block, so start from the beginning.
+		from = 0
+	}
+
+	return from
 }
 
 func (s *Service) pollTxs(ctx context.Context,
