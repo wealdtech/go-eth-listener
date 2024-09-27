@@ -159,7 +159,7 @@ func (s *Service) calculateBlocksFrom(_ context.Context, md *blocksMetadata) uin
 		// We have to reset the metadata, otherwise blocks won't be reprocessed.
 		from = uint32(s.earliestBlock)
 		for name := range md.LatestBlocks {
-			md.LatestBlocks[name] = s.earliestBlock
+			md.LatestBlocks[name] = s.earliestBlock - 1
 		}
 		s.earliestBlock = -1
 	case len(md.LatestBlocks) > 0:
