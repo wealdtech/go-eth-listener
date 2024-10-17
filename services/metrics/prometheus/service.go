@@ -15,10 +15,10 @@ package prometheus
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	zerologger "github.com/rs/zerolog/log"
@@ -33,7 +33,7 @@ type Service struct {
 func New(_ context.Context, params ...Parameter) (*Service, error) {
 	parameters, err := parseAndCheckParameters(params...)
 	if err != nil {
-		return nil, errors.Wrap(err, "problem with parameters")
+		return nil, errors.Join(errors.New("problem with parameters"), err)
 	}
 
 	// Set logging.

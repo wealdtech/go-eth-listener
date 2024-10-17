@@ -28,6 +28,7 @@ import (
 
 type parameters struct {
 	logLevel       zerolog.Level
+	clientLogLevel zerolog.Level
 	monitor        metrics.Service
 	metadataDBPath string
 	address        string
@@ -52,10 +53,17 @@ func (f parameterFunc) apply(p *parameters) {
 	f(p)
 }
 
-// WithLogLevel sets the log level.
+// WithLogLevel sets the log level for the listener.
 func WithLogLevel(logLevel zerolog.Level) Parameter {
 	return parameterFunc(func(p *parameters) {
 		p.logLevel = logLevel
+	})
+}
+
+// WithClientLogLevel sets the log level for the clients used by the listener.
+func WithClientLogLevel(logLevel zerolog.Level) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.clientLogLevel = logLevel
 	})
 }
 
@@ -142,9 +150,10 @@ func WithInterval(interval time.Duration) Parameter {
 // parseAndCheckParameters parses and checks parameters to ensure that mandatory parameters are present and correct.
 func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	parameters := parameters{
-		logLevel:      zerolog.GlobalLevel(),
-		monitor:       nullmetrics.New(),
-		earliestBlock: -1,
+		logLevel:       zerolog.GlobalLevel(),
+		clientLogLevel: zerolog.GlobalLevel(),
+		monitor:        nullmetrics.New(),
+		earliestBlock:  -1,
 	}
 	for _, p := range params {
 		if p != nil {

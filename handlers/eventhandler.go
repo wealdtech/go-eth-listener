@@ -43,5 +43,5 @@ type EventHandlerFunc func(ctx context.Context, event *spec.BerlinTransactionEve
 
 // EventHandler defines the methods that need to be implemented to handle events.
 type EventHandler interface {
-	HandleEvent(ctx context.Context, event *spec.BerlinTransactionEvent, trigger *EventTrigger)
+	HandleEvent(ctx context.Context, event *spec.BerlinTransactionEvent, trigger *EventTrigger) error
 }

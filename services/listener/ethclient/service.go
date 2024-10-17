@@ -15,6 +15,7 @@ package ethclient
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,11 +23,9 @@ import (
 	execclient "github.com/attestantio/go-execution-client"
 	jsonrpcexecclient "github.com/attestantio/go-execution-client/jsonrpc"
 	"github.com/cockroachdb/pebble"
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	zerologger "github.com/rs/zerolog/log"
 	"github.com/wealdtech/go-eth-listener/handlers"
-	"github.com/wealdtech/go-eth-listener/util"
 )
 
 // Service is a listener that listens to an Ethereum client.
@@ -51,7 +50,7 @@ type Service struct {
 func New(ctx context.Context, params ...Parameter) (*Service, error) {
 	parameters, err := parseAndCheckParameters(params...)
 	if err != nil {
-		return nil, errors.Wrap(err, "problem with parameters")
+		return nil, err
 	}
 
 	// Set logging.
@@ -61,7 +60,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 	}
 
 	if err := registerMetrics(ctx, parameters.monitor); err != nil {
-		return nil, errors.Wrap(err, "failed to register metrics")
+		return nil, err
 	}
 
 	chainHeightProvider, blocksProvider, eventsProvider, err := setupProviders(ctx, parameters)
@@ -71,7 +70,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 
 	metadataDB, err := pebble.Open(parameters.metadataDBPath, &pebble.Options{})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to start metadata database")
+		return nil, errors.Join(errors.New("failed to start metadata database"), err)
 	}
 
 	s := &Service{
@@ -119,12 +118,12 @@ func setupProviders(ctx context.Context,
 	error,
 ) {
 	client, err := jsonrpcexecclient.New(ctx,
-		jsonrpcexecclient.WithLogLevel(util.LogLevel("execclient")),
+		jsonrpcexecclient.WithLogLevel(parameters.clientLogLevel),
 		jsonrpcexecclient.WithAddress(parameters.address),
 		jsonrpcexecclient.WithTimeout(parameters.timeout),
 	)
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "failed to connect to Ethereum client")
+		return nil, nil, nil, errors.Join(errors.New("failed to connect to Ethereum client"), err)
 	}
 	chainHeightProvider, isProvider := client.(execclient.ChainHeightProvider)
 	if !isProvider {

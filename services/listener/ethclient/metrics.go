@@ -15,8 +15,8 @@ package ethclient
 
 import (
 	"context"
+	"errors"
 
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/wealdtech/go-eth-listener/services/metrics"
 )
@@ -52,7 +52,7 @@ func registerPrometheusMetrics() error {
 		Help:      "The latest block processed",
 	})
 	if err := prometheus.Register(latestBlockMetric); err != nil {
-		return errors.Wrap(err, "failed to register latest block metric")
+		return errors.Join(errors.New("failed to register latest block metric"), err)
 	}
 
 	failuresMetric = prometheus.NewCounter(prometheus.CounterOpts{
@@ -62,7 +62,7 @@ func registerPrometheusMetrics() error {
 		Help:      "The number of failures.",
 	})
 	if err := prometheus.Register(failuresMetric); err != nil {
-		return errors.Wrap(err, "failed to register total failures")
+		return errors.Join(errors.New("failed to register total failures"), err)
 	}
 
 	return nil

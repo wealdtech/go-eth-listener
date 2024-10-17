@@ -16,9 +16,9 @@ package ethclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/pkg/errors"
 )
 
 var (
@@ -36,7 +36,14 @@ type transactionsMetadata struct {
 }
 
 type eventsMetadata struct {
-	LatestBlocks map[string]uint32 `json:"latest_blocks"`
+	// LatestBlocks is deprecated.
+	LatestBlocks map[string]uint32               `json:"latest_blocks,omitempty"`
+	Entries      map[string]*eventsEntryMetadata `json:"entries"`
+}
+
+type eventsEntryMetadata struct {
+	LatestBlock      uint32 `json:"latest_block"`
+	LatestEventIndex int32  `json:"latest_event_index"`
 }
 
 func (s *Service) getBlocksMetadata(_ context.Context) (*blocksMetadata, error) {
@@ -56,15 +63,15 @@ func (s *Service) getBlocksMetadata(_ context.Context) (*blocksMetadata, error) 
 			return res, nil
 		}
 
-		return nil, errors.Wrap(err, "failed to get blocks metadata")
+		return nil, errors.Join(errors.New("failed to get blocks metadata"), err)
 	}
 
 	if err := closer.Close(); err != nil {
-		return nil, errors.Wrap(err, "failed to close blocks metadata")
+		return nil, errors.Join(errors.New("failed to close blocks metadata"), err)
 	}
 
 	if err := json.Unmarshal(data, res); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal blocks metadata")
+		return nil, errors.Join(errors.New("failed to unmarshal blocks metadata"), err)
 	}
 
 	return res, nil
@@ -79,11 +86,11 @@ func (s *Service) setBlocksMetadata(_ context.Context, md *blocksMetadata) error
 
 	data, err := json.Marshal(md)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal blocks metadata")
+		return errors.Join(errors.New("failed to marshal blocks metadata"), err)
 	}
 
 	if err := s.metadataDB.Set(blocksMetadataKey, data, pebble.Sync); err != nil {
-		return errors.Wrap(err, "failed to set blocks metadata")
+		return errors.Join(errors.New("failed to set blocks metadata"), err)
 	}
 
 	return nil
@@ -104,16 +111,16 @@ func (s *Service) getTransactionsMetadata(_ context.Context) (*transactionsMetad
 			}, nil
 		}
 
-		return nil, errors.Wrap(err, "failed to get transactions metadata")
+		return nil, errors.Join(errors.New("failed to get transactions metadata"), err)
 	}
 
 	if err := closer.Close(); err != nil {
-		return nil, errors.Wrap(err, "failed to close transactions metadata")
+		return nil, errors.Join(errors.New("failed to close transactions metadata"), err)
 	}
 
 	res := &transactionsMetadata{}
 	if err := json.Unmarshal(data, res); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal transactions metadata")
+		return nil, errors.Join(errors.New("failed to unmarshal transactions metadata"), err)
 	}
 
 	return res, nil
@@ -128,11 +135,11 @@ func (s *Service) setTransactionsMetadata(_ context.Context, md *transactionsMet
 
 	data, err := json.Marshal(md)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal transactions metadata")
+		return errors.Join(errors.New("failed to marshal transactions metadata"), err)
 	}
 
 	if err := s.metadataDB.Set(transactionsMetadataKey, data, pebble.Sync); err != nil {
-		return errors.Wrap(err, "failed to set transactions metadata")
+		return errors.Join(errors.New("failed to set transactions metadata"), err)
 	}
 
 	return nil
@@ -149,20 +156,31 @@ func (s *Service) getEventsMetadata(_ context.Context) (*eventsMetadata, error) 
 	if err != nil {
 		if errors.Is(err, pebble.ErrNotFound) {
 			return &eventsMetadata{
-				LatestBlocks: map[string]uint32{},
+				Entries: map[string]*eventsEntryMetadata{},
 			}, nil
 		}
 
-		return nil, errors.Wrap(err, "failed to get events metadata")
+		return nil, errors.Join(errors.New("failed to get events metadata"), err)
 	}
 
 	if err := closer.Close(); err != nil {
-		return nil, errors.Wrap(err, "failed to close events metadata")
+		return nil, errors.Join(errors.New("failed to close events metadata"), err)
 	}
 
 	res := &eventsMetadata{}
 	if err := json.Unmarshal(data, res); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal events metadata")
+		return nil, errors.Join(errors.New("failed to unmarshal events metadata"), err)
+	}
+
+	if res.Entries == nil {
+		res.Entries = map[string]*eventsEntryMetadata{}
+		for k, v := range res.LatestBlocks {
+			res.Entries[k] = &eventsEntryMetadata{
+				LatestBlock:      v,
+				LatestEventIndex: -1,
+			}
+		}
+		res.LatestBlocks = nil
 	}
 
 	return res, nil
@@ -177,11 +195,11 @@ func (s *Service) setEventsMetadata(_ context.Context, md *eventsMetadata) error
 
 	data, err := json.Marshal(md)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal events metadata")
+		return errors.Join(errors.New("failed to marshal events metadata"), err)
 	}
 
 	if err := s.metadataDB.Set(eventsMetadataKey, data, pebble.Sync); err != nil {
-		return errors.Wrap(err, "failed to set events metadata")
+		return errors.Join(errors.New("failed to set events metadata"), err)
 	}
 
 	return nil

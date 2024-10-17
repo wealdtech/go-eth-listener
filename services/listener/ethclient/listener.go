@@ -16,12 +16,13 @@ package ethclient
 import (
 	"bytes"
 	"context"
+	"errors"
 	"time"
 
 	"github.com/attestantio/go-execution-client/api"
 	"github.com/attestantio/go-execution-client/types"
 	executil "github.com/attestantio/go-execution-client/util"
-	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 	"github.com/wealdtech/go-eth-listener/handlers"
 )
 
@@ -51,52 +52,74 @@ func (s *Service) selectHighestBlock(ctx context.Context) (uint32, error) {
 	if s.blockSpecifier != "" {
 		block, err := s.blocksProvider.Block(ctx, s.blockSpecifier)
 		if err != nil {
-			return 0, errors.Wrap(err, "failed to obtain block")
+			return 0, errors.Join(errors.New("failed to obtain block"), err)
 		}
 		to = block.Number()
 		s.log.Trace().Str("specifier", s.blockSpecifier).Uint32("height", to).Msg("Obtained chain height with specifier")
 	} else {
 		chainHeight, err := s.chainHeightProvider.ChainHeight(ctx)
 		if err != nil {
-			return 0, errors.Wrap(err, "failed to get chain height for event poll")
+			return 0, errors.Join(errors.New("failed to get chain height for event poll"), err)
 		}
 		to = chainHeight - s.blockDelay
 		s.log.Trace().Uint32("block_delay", s.blockDelay).Uint32("height", to).Msg("Obtained chain height with delay")
 	}
+
+	s.log.Trace().Uint32("height", to).Msg("Selected highest block")
 
 	return to, nil
 }
 
 func (s *Service) poll(ctx context.Context) {
 	to, err := s.selectHighestBlock(ctx)
-	if err != nil {
+	if err != nil && ctx.Err() == nil {
 		s.log.Error().Err(err).Msg("Failed to select highest block")
 		monitorFailure()
+
 		return
 	}
 
-	s.log.Trace().Uint32("to", to).Msg("Selected highest block")
+	s.pollTo(ctx, to)
+}
 
-	switch {
-	case len(s.blockTriggers) > 0:
-		// We have block triggers, fetch full blocks.
-		s.log.Trace().Msg("Polling blocks")
-		err = s.pollBlocks(ctx, to)
-	case len(s.txTriggers) > 0:
-		// We have transaction triggers, fetch full blocks.
-		s.log.Trace().Msg("Polling blocks for transactions")
-		err = s.pollTxs(ctx, to)
-	case len(s.eventTriggers) > 0:
-		// We have event triggers, fetch events only.
-		s.log.Trace().Msg("Polling events")
-		err = s.pollEvents(ctx, to)
-	}
-	if err != nil && ctx.Err() == nil {
-		s.log.Error().Err(err).Msg("Poll failed")
-		monitorFailure()
-	}
-
+func (s *Service) pollTo(ctx context.Context, to uint32) {
+	s.pollBlocksTo(ctx, to)
+	s.pollTxsTo(ctx, to)
+	s.pollEventsTo(ctx, to)
 	monitorLatestBlock(to)
+}
+
+func (s *Service) pollBlocksTo(ctx context.Context, to uint32) {
+	if len(s.blockTriggers) > 0 {
+		s.log.Trace().Msg("Polling blocks")
+		err := s.pollBlocks(ctx, to)
+		if err != nil && ctx.Err() == nil {
+			s.log.Error().Err(err).Msg("Block poll failed")
+			monitorFailure()
+		}
+	}
+}
+
+func (s *Service) pollTxsTo(ctx context.Context, to uint32) {
+	if len(s.txTriggers) > 0 {
+		s.log.Trace().Msg("Polling blocks for transactions")
+		err := s.pollTxs(ctx, to)
+		if err != nil && ctx.Err() == nil {
+			s.log.Error().Err(err).Msg("Transaction poll failed")
+			monitorFailure()
+		}
+	}
+}
+
+func (s *Service) pollEventsTo(ctx context.Context, to uint32) {
+	if len(s.eventTriggers) > 0 {
+		s.log.Trace().Msg("Polling events")
+		err := s.pollEvents(ctx, to)
+		if err != nil && ctx.Err() == nil {
+			s.log.Error().Err(err).Msg("Event poll failed")
+			monitorFailure()
+		}
+	}
 }
 
 func (s *Service) pollBlocks(ctx context.Context,
@@ -104,7 +127,7 @@ func (s *Service) pollBlocks(ctx context.Context,
 ) error {
 	md, err := s.getBlocksMetadata(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to get metadata for block poll")
+		return errors.Join(errors.New("failed to get metadata for block poll"), err)
 	}
 
 	from := s.calculateBlocksFrom(ctx, md)
@@ -118,8 +141,9 @@ func (s *Service) pollBlocks(ctx context.Context,
 		s.log.Trace().Uint32("block", height).Msg("Handling block")
 		block, err := s.blocksProvider.Block(ctx, executil.MarshalUint32(height))
 		if err != nil {
-			return errors.Wrap(err, "failed to obtain block")
+			return errors.Join(errors.New("failed to obtain block"), err)
 		}
+
 		for _, trigger := range s.blockTriggers {
 			if failed[trigger.Name] {
 				// The trigger already reported a failure in this run, so don't run for future blocks.
@@ -140,7 +164,7 @@ func (s *Service) pollBlocks(ctx context.Context,
 		}
 
 		if err := s.setBlocksMetadata(ctx, md); err != nil {
-			return errors.Wrap(err, "failed to set metadata after block poll")
+			return errors.Join(errors.New("failed to set metadata after block poll"), err)
 		}
 	}
 
@@ -183,7 +207,7 @@ func (s *Service) pollTxs(ctx context.Context,
 ) error {
 	md, err := s.getTransactionsMetadata(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to get metadata for transaction poll")
+		return errors.Join(errors.New("failed to get metadata for transaction poll"), err)
 	}
 
 	from := uint32(md.LatestBlock + 1)
@@ -204,7 +228,7 @@ func (s *Service) pollTxs(ctx context.Context,
 
 		md.LatestBlock = int32(height)
 		if err := s.setTransactionsMetadata(ctx, md); err != nil {
-			return errors.Wrap(err, "failed to set metadata after trasaction poll")
+			return errors.Join(errors.New("failed to set metadata after trasaction poll"), err)
 		}
 	}
 
@@ -214,8 +238,9 @@ func (s *Service) pollTxs(ctx context.Context,
 func (s *Service) pollBlockTxs(ctx context.Context, height uint32) error {
 	block, err := s.blocksProvider.Block(ctx, executil.MarshalUint32(height))
 	if err != nil {
-		return errors.Wrap(err, "failed to obtain block for transactions")
+		return errors.Join(errors.New("failed to obtain block for transactions"), err)
 	}
+
 	log := s.log.With().Uint32("block_height", block.Number()).Logger()
 	for _, trigger := range s.txTriggers {
 		log := log.With().Str("trigger", trigger.Name).Logger()
@@ -246,40 +271,58 @@ func (s *Service) pollBlockTxs(ctx context.Context, height uint32) error {
 }
 
 func (s *Service) pollEvents(ctx context.Context,
-	to uint32,
+	toBlock uint32,
 ) error {
 	md, err := s.getEventsMetadata(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to get metadata for event poll")
+		return errors.Join(errors.New("failed to get metadata for event poll"), err)
 	}
 
 	// Need to run each trigger separately.
 	for _, trigger := range s.eventTriggers {
-		// Obtain the last block we examined for this trigger, or
-		// use the earliest block as defined in the trigger.
-		from := trigger.EarliestBlock
-		if _, exists := md.LatestBlocks[trigger.Name]; exists {
-			next := md.LatestBlocks[trigger.Name] + 1
-			if next > from {
-				from = next
+		// Obtain the last block and transaction we examined for this trigger, or use the earliest block as defined in the trigger.
+		fromBlock := trigger.EarliestBlock
+		fromEventIndex := int32(-1)
+		if entry, exists := md.Entries[trigger.Name]; exists {
+			if entry.LatestBlock >= fromBlock {
+				fromBlock = entry.LatestBlock
+				fromEventIndex = entry.LatestEventIndex
+			}
+		} else {
+			md.Entries[trigger.Name] = &eventsEntryMetadata{
+				LatestBlock:      fromBlock,
+				LatestEventIndex: fromEventIndex,
 			}
 		}
-		if from > to {
-			s.log.Trace().Str("trigger", trigger.Name).Uint32("from", from).Uint32("to", to).Msg("Not fetching events")
+		if fromBlock > toBlock {
+			s.log.Trace().
+				Str("trigger", trigger.Name).
+				Uint32("from_block", fromBlock).
+				Int32("from_event_index", fromEventIndex).
+				Uint32("to_block", toBlock).
+				Msg("Not fetching events")
+
 			return nil
 		}
 
-		if to+1-from > maxBlocksForEvents {
-			to = from + maxBlocksForEvents - 1
+		if toBlock+1-fromBlock > maxBlocksForEvents {
+			toBlock = fromBlock + maxBlocksForEvents - 1
 		}
 
-		if err := s.pollEventsForTrigger(ctx, trigger, from, to); err != nil {
-			return err
+		latestBlock, latestEventIndex, err := s.pollEventsForTrigger(ctx, trigger, fromBlock, fromEventIndex, toBlock)
+		if err != nil {
+			s.log.Debug().
+				Str("trigger", trigger.Name).
+				Uint32("latest_block", latestBlock).
+				Int32("latest_event_index", latestEventIndex).
+				Err(err).
+				Msg("Poll errored")
 		}
+		md.Entries[trigger.Name].LatestBlock = latestBlock
+		md.Entries[trigger.Name].LatestEventIndex = latestEventIndex
 
-		md.LatestBlocks[trigger.Name] = to
 		if err := s.setEventsMetadata(ctx, md); err != nil {
-			return errors.Wrap(err, "failed to set metadata after event poll")
+			return errors.Join(errors.New("failed to set metadata after event poll"), err)
 		}
 	}
 
@@ -288,42 +331,88 @@ func (s *Service) pollEvents(ctx context.Context,
 
 func (s *Service) pollEventsForTrigger(ctx context.Context,
 	trigger *handlers.EventTrigger,
-	from uint32,
-	to uint32,
-) error {
-	// Resolve the source.
+	fromBlock uint32,
+	fromEventIndex int32,
+	toBlock uint32,
+) (
+	uint32,
+	int32,
+	error,
+) {
+	log := s.log.With().Str("trigger", trigger.Name).Logger()
+
+	source, err := s.resolveSourceFromTrigger(ctx, trigger)
+	if err != nil {
+		return fromBlock, fromEventIndex, err
+	}
+
+	log.Trace().Uint32("from_block", fromBlock).Int32("from_event", fromEventIndex).Uint32("to", toBlock).Msg("Fetching events")
+
+	filter := &api.EventsFilter{
+		FromBlock: executil.MarshalUint32(fromBlock),
+		ToBlock:   executil.MarshalUint32(toBlock),
+	}
+	if source != nil {
+		filter.Address = source
+	}
+	if len(trigger.Topics) > 0 {
+		filter.Topics = trigger.Topics
+	}
+
+	events, err := s.eventsProvider.Events(ctx, filter)
+	if err != nil {
+		return fromBlock, fromEventIndex, errors.Join(errors.New("failed to obtain events"), err)
+	}
+
+	latestBlock := fromBlock
+	latestEventIndex := fromEventIndex
+	for _, event := range events {
+		log := log.With().
+			Uint32("block_number", event.BlockNumber).
+			Stringer("tx", event.TransactionHash).
+			Uint32("event_index", event.Index).
+			Logger()
+
+		if event.BlockNumber == fromBlock && int32(event.Index) <= fromEventIndex {
+			// This event has already been handled.
+			continue
+		}
+		if err := trigger.Handler.HandleEvent(ctx, event, trigger); err != nil {
+			log.Debug().Err(err).Msg("Handler errored")
+
+			return latestBlock, latestEventIndex, errors.Join(errors.New("handler errored"), err)
+		}
+		log.Trace().Msg("Handler succeeded")
+
+		latestBlock = event.BlockNumber
+		latestEventIndex = int32(event.Index)
+	}
+
+	// We have processed all of the events for the blocks.
+	return toBlock + 1, -1, nil
+}
+
+func (s *Service) resolveSourceFromTrigger(ctx context.Context,
+	trigger *handlers.EventTrigger,
+) (
+	*types.Address,
+	error,
+) {
+	// Resolve the source, if present.
 	var source *types.Address
 	var err error
 	switch {
 	case trigger.SourceResolver != nil:
 		source, err = trigger.SourceResolver.Resolve(ctx)
 		if err != nil {
-			return errors.Wrap(err, "failed to resolve source")
+			return nil, errors.Join(errors.New("failed to resolve source"), err)
 		}
 	case trigger.Source != nil:
 		source = trigger.Source
-	default:
-		return errors.New("no source")
 	}
-	if source == nil {
-		return errors.New("source resolution returned nil")
+	if source != nil {
+		log.Trace().Stringer("source", source).Msg("Source to be used for events")
 	}
 
-	s.log.Trace().Stringer("source", source).Str("trigger", trigger.Name).Uint32("from", from).Uint32("to", to).Msg("Fetching events")
-
-	filter := &api.EventsFilter{
-		FromBlock: executil.MarshalUint32(from),
-		ToBlock:   executil.MarshalUint32(to),
-		Address:   source,
-		Topics:    trigger.Topics,
-	}
-	events, err := s.eventsProvider.Events(ctx, filter)
-	if err != nil {
-		return errors.Wrap(err, "failed to obtain events")
-	}
-	for _, event := range events {
-		trigger.Handler.HandleEvent(ctx, event, trigger)
-	}
-
-	return nil
+	return source, nil
 }
