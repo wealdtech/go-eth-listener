@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-execution-client/api"
@@ -139,7 +140,7 @@ func (s *Service) pollBlocks(ctx context.Context,
 	failed := make(map[string]bool)
 	for height := from; height <= to; height++ {
 		s.log.Trace().Uint32("block", height).Msg("Handling block")
-		block, err := s.blocksProvider.Block(ctx, executil.MarshalUint32(height))
+		block, err := s.blocksProvider.Block(ctx, fmt.Sprintf("%d", height))
 		if err != nil {
 			return errors.Join(errors.New("failed to obtain block"), err)
 		}
@@ -236,7 +237,7 @@ func (s *Service) pollTxs(ctx context.Context,
 }
 
 func (s *Service) pollBlockTxs(ctx context.Context, height uint32) error {
-	block, err := s.blocksProvider.Block(ctx, executil.MarshalUint32(height))
+	block, err := s.blocksProvider.Block(ctx, fmt.Sprintf("%d", height))
 	if err != nil {
 		return errors.Join(errors.New("failed to obtain block for transactions"), err)
 	}
