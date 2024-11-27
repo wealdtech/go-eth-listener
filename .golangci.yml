@@ -136,13 +136,10 @@ linters:
   disable:
     - depguard
     - err113
-    - execinquery
     - exhaustruct
     - exportloopref
     - gochecknoglobals
-    - gomnd
     - ireturn
-    - mnd
     - perfsprint
     - varnamelen
     - wsl

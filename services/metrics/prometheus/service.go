@@ -24,6 +24,8 @@ import (
 	zerologger "github.com/rs/zerolog/log"
 )
 
+const readHeaderTimeout = 5 * time.Second
+
 // Service is a metrics service exposing metrics via prometheus.
 type Service struct {
 	log zerolog.Logger
@@ -50,7 +52,7 @@ func New(_ context.Context, params ...Parameter) (*Service, error) {
 		http.Handle("/metrics", promhttp.Handler())
 		server := &http.Server{
 			Addr:              parameters.address,
-			ReadHeaderTimeout: 5 * time.Second,
+			ReadHeaderTimeout: readHeaderTimeout,
 		}
 		if err := server.ListenAndServe(); err != nil {
 			s.log.Warn().Str("metrics_address", parameters.address).Err(err).Msg("Failed to run metrics server")
